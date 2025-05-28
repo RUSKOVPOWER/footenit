@@ -1,0 +1,214 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tableur des Scores et Classements</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-4">
+    <div class="container mx-auto max-w-4xl">
+        <h1 class="text-3xl font-bold mb-6 text-center">Tableur des Scores et Classements</h1>
+
+        <!-- Sélection du sport -->
+        <div class="mb-6">
+            <label for="sport-select" class="block text-lg font-medium mb-2">Sélectionner un sport :</label>
+            <select id="sport-select" class="w-full p-2 border rounded-md" onchange="updateSport()">
+                <option value="foot">Football</option>
+                <option value="hand">Handball</option>
+                <option value="basket">Basketball</option>
+                <option value="rugby">Rugby</option>
+                <option value="volley">Volleyball</option>
+                <option value="badminton">Badminton</option>
+            </select>
+        </div>
+
+        <!-- Saisie des scores -->
+        <div class="mb-6">
+            <h2 class="text-2xl font-semibold mb-4">Saisie des scores</h2>
+            <div id="match-inputs" class="grid grid-cols-1 gap-4">
+                <!-- Les matchs seront générés dynamiquement ici -->
+            </div>
+            <button onclick="addMatch()" class="mt-4 bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Ajouter un match</button>
+        </div>
+
+        <!-- Classement -->
+        <div>
+            <h2 class="text-2xl font-semibold mb-4">Classement</h2>
+            <table id="ranking-table" class="w-full border-collapse border">
+                <thead>
+                    <tr class="bg-gray-200">
+                        <th class="border p-2">Équipe</th>
+                        <th class="border p-2">Points</th>
+                        <th class="border p-2">Matchs joués</th>
+                        <th class="border p-2">Victoires</th>
+                        <th class="border p-2">Nuls</th>
+                        <th class="border p-2">Défaites</th>
+                    </tr>
+                </thead>
+                <tbody id="ranking-body">
+                    <!-- Le classement sera généré dynamiquement ici -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const teams = ['Tarbes', 'Metz', 'St Etienne', 'Brest'];
+        const sports = ['foot', 'hand', 'basket', 'rugby', 'volley', 'badminton'];
+        let matches = {
+            foot: [],
+            hand: [],
+            basket: [],
+            rugby: [],
+            volley: [],
+            badminton: []
+        };
+
+        function updateSport() {
+            const sport = document.getElementById('sport-select').value;
+            renderMatchInputs(sport);
+            updateRanking(sport);
+        }
+
+        function addMatch() {
+            const sport = document.getElementById('sport-select').value;
+            matches[sport].push({ team1: teams[0], score1: 0, team2: teams[1], score2: 0 });
+            renderMatchInputs(sport);
+            updateRanking(sport);
+        }
+
+        function renderMatchInputs(sport) {
+            const matchInputs = document.getElementById('match-inputs');
+            matchInputs.innerHTML = '';
+            matches[sport].forEach((match, index) => {
+                const matchDiv = document.createElement('div');
+                matchDiv.className = 'flex items-center space-x-2 p-2 bg-white rounded shadow';
+                matchDiv.innerHTML = `
+                    <select class="p-2 border rounded" onchange="updateMatch(${index}, 'team1', this.value, '${sport}')">
+                        ${teams.map(team => `<option value="${team}" ${match.team1 === team ? 'selected' : ''}>${team}</option>`).join('')}
+                    </select>
+                    <input type="number" min="0" value="${match.score1}" class="w-16 p-2 border rounded" onchange="updateMatch(${index}, 'score1', this.value, '${sport}')">
+                    <span>vs</span>
+                    <input type="number" min="0" value="${match.score2}" class="w-16 p-2 border rounded" onchange="updateMatch(${index}, 'score2', this.value, '${sport}')">
+                    <select class="p-2 border rounded" onchange="updateMatch(${index}, 'team2', this.value, '${sport}')">
+                        ${teams.map(team => `<option value="${team}" ${match.team2 === team ? 'selected' : ''}>${team}</option>`).join('')}
+                    </select>
+                    <button class="bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600" onclick="deleteMatch(${index}, '${sport}')">Supprimer</button>
+                `;
+                matchInputs.appendChild(matchDiv);
+            });
+        }
+
+        function updateMatch(index, field, value, sport) {
+            if (field === 'score1' || field === 'score2') {
+                matches[sport][index][field] = parseInt(value) || 0;
+            } else {
+                matches[sport][index][field] = value;
+            }
+            updateRanking(sport);
+        }
+
+        function deleteMatch(index, sport) {
+            matches[sport].splice(index, 1);
+            renderMatchInputs(sport);
+            updateRanking(sport);
+        }
+
+        function calculateRanking(sport) {
+            const rankings = teams.map(team => ({
+                team,
+                points: 0,
+                played: 0,
+                wins: 0,
+                draws: 0,
+                losses: 0
+            }));
+
+            matches[sport].forEach(match => {
+                if (match.team1 === match.team2) return; // Ignorer les matchs où une équipe joue contre elle-même
+                const team1 = rankings.find(r => r.team === match.team1);
+                const team2 = rankings.find(r => r.team === match.team2);
+                team1.played++;
+                team2.played++;
+                if (match.score1 > match.score2) {
+                    team1.points += 3;
+                    team1.wins++;
+                    team2.losses++;
+                } else if (match.score2 > match.score1) {
+                    team2.points += 3;
+                    team2.wins++;
+                    team1.losses++;
+                } else {
+                    team1.points += 1;
+                    team2.points += 1;
+                    team1.draws++;
+                    team2.draws++;
+                }
+            });
+
+            return rankings.sort((a, b) => b.points - a.points || b.wins - a.wins);
+        }
+
+        function updateRanking(sport) {
+            const rankingBody = document.getElementById('ranking-body');
+            const rankings = calculateRanking(sport);
+            rankingBody.innerHTML = '';
+            rankings.forEach(r => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="border p-2">${r.team}</td>
+                    <td class="border p-2">${r.points}</td>
+                    <td class="border p-2">${r.played}</td>
+                    <td class="border p-2">${r.wins}</td>
+                    <td class="border p-2">${r.draws}</td>
+                    <td class="border p-2">${r.losses}</td>
+                `;
+                rankingBody.appendChild(row);
+            });
+        }
+
+        // Initialisation
+        updateSport();
+    </script>
+</body>
+</html>
